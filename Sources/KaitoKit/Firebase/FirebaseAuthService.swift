@@ -269,8 +269,16 @@ public class FirebaseAuthService: ObservableObject {
             let result: GIDSignInResult
 
             #if os(iOS)
-            guard let presentingVC = presentingViewController ?? UIApplication.shared.windows.first?.rootViewController else {
-                throw FirebaseAuthError.googleSignInFailed
+            let presentingVC: UIViewController
+            if let provided = presentingViewController {
+                presentingVC = provided
+            } else {
+                // iOS 15+ compatible way to get root view controller
+                guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                      let rootVC = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
+                    throw FirebaseAuthError.googleSignInFailed
+                }
+                presentingVC = rootVC
             }
             result = try await GIDSignIn.sharedInstance.signIn(withPresenting: presentingVC)
             #else
