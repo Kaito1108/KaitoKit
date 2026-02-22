@@ -134,7 +134,7 @@ public class FirebaseAuthService: ObservableObject {
     private var currentNonce: String?
     #endif
 
-    private init() {
+    public init() {
         setupAuthStateListener()
     }
 
