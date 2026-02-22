@@ -24,7 +24,7 @@ public struct AnimatedNumber: View {
             .onAppear {
                 animateValue()
             }
-            .onChange(of: value) { _, _ in
+            .onChange(of: value) {
                 animateValue()
             }
     }

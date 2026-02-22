@@ -6,7 +6,8 @@
 
 - 🎨 **UIコンポーネント**: ボタン、カラー、フォント、バナー通知など
 - 🔥 **Firebase統合**: Firestore CRUD操作の簡易ラッパー
-- 🔐 **認証ヘルパー**: メールバリデーション、パスワード強度チェック
+- 🔐 **Firebase認証**: Apple/Google/メールパスワードログイン、状態監視
+- 🛡️ **認証ヘルパー**: メールバリデーション、パスワード強度チェック
 - 🛠️ **便利なExtensions**: Date、Int、String、Viewの拡張機能
 
 ## インストール
@@ -252,6 +253,254 @@ let exists = try await FirestoreService.shared.checkDocumentExists(
 )
 ```
 
+### Firebase認証
+
+#### 1. プロジェクトにFirebase Auth SDKを追加
+
+`Package.swift`に以下を追加:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/Kaito/KaitoKit.git", from: "1.0.0"),
+    .package(url: "https://github.com/firebase/firebase-ios-sdk", from: "10.0.0")
+],
+targets: [
+    .target(
+        name: "YourApp",
+        dependencies: [
+            "KaitoKit",
+            .product(name: "FirebaseAuth", package: "firebase-ios-sdk")
+        ]
+    )
+]
+```
+
+Googleログインを使う場合は、さらに以下も追加:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/google/GoogleSignIn-iOS", from: "7.0.0")
+],
+targets: [
+    .target(
+        name: "YourApp",
+        dependencies: [
+            .product(name: "GoogleSignIn", package: "GoogleSignIn-iOS")
+        ]
+    )
+]
+```
+
+#### 2. FirebaseAuthServiceを使用
+
+FirebaseAuthServiceは`ObservableObject`として実装されており、ユーザーの認証状態を自動的に監視します。
+
+```swift
+import SwiftUI
+import KaitoKit
+import FirebaseAuth
+
+@main
+struct YourApp: App {
+    @StateObject private var authService = FirebaseAuthService.shared
+
+    var body: some Scene {
+        WindowGroup {
+            if authService.isAuthenticated {
+                HomeView()
+            } else {
+                LoginView()
+            }
+        }
+    }
+}
+```
+
+#### メールアドレス/パスワード認証
+
+```swift
+import KaitoKit
+
+struct LoginView: View {
+    @StateObject private var authService = FirebaseAuthService.shared
+    @State private var email = ""
+    @State private var password = ""
+
+    var body: some View {
+        VStack(spacing: 20) {
+            TextField("メールアドレス", text: $email)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+
+            SecureField("パスワード", text: $password)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+
+            // サインアップ
+            Button("アカウント作成") {
+                Task {
+                    do {
+                        try await authService.signUpWithEmail(email: email, password: password)
+                    } catch {
+                        print("エラー: \(error.localizedDescription)")
+                    }
+                }
+            }
+
+            // サインイン
+            Button("ログイン") {
+                Task {
+                    do {
+                        try await authService.signInWithEmail(email: email, password: password)
+                    } catch {
+                        print("エラー: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+        .padding()
+    }
+}
+```
+
+#### Apple Sign In
+
+```swift
+import SwiftUI
+import KaitoKit
+import AuthenticationServices
+
+struct AppleSignInView: View {
+    @StateObject private var authService = FirebaseAuthService.shared
+
+    var body: some View {
+        SignInWithAppleButton { request in
+            let nonce = authService.prepareAppleSignIn()
+            request.requestedScopes = [.fullName, .email]
+            request.nonce = nonce
+        } onCompletion: { result in
+            switch result {
+            case .success(let authorization):
+                if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                   let appleIDToken = appleIDCredential.identityToken,
+                   let idTokenString = String(data: appleIDToken, encoding: .utf8),
+                   let nonce = appleIDCredential.nonce {
+                    Task {
+                        do {
+                            try await authService.signInWithApple(idToken: idTokenString, rawNonce: nonce)
+                        } catch {
+                            print("エラー: \(error.localizedDescription)")
+                        }
+                    }
+                }
+            case .failure(let error):
+                print("Apple Sign In エラー: \(error)")
+            }
+        }
+        .frame(height: 50)
+    }
+}
+```
+
+#### Googleログイン
+
+```swift
+import SwiftUI
+import KaitoKit
+import GoogleSignIn
+
+struct GoogleSignInView: View {
+    @StateObject private var authService = FirebaseAuthService.shared
+
+    var body: some View {
+        Button("Googleでログイン") {
+            Task {
+                do {
+                    guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                          let rootViewController = windowScene.windows.first?.rootViewController else {
+                        return
+                    }
+                    try await authService.signInWithGoogle(presentingViewController: rootViewController)
+                } catch {
+                    print("エラー: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+}
+```
+
+#### サインアウト・アカウント削除
+
+```swift
+import KaitoKit
+
+// サインアウト
+Button("サインアウト") {
+    do {
+        try FirebaseAuthService.shared.signOut()
+    } catch {
+        print("エラー: \(error.localizedDescription)")
+    }
+}
+
+// アカウント削除
+Button("アカウント削除") {
+    Task {
+        do {
+            try await FirebaseAuthService.shared.deleteAccount()
+        } catch {
+            print("エラー: \(error.localizedDescription)")
+        }
+    }
+}
+```
+
+#### パスワードリセット
+
+```swift
+import KaitoKit
+
+Button("パスワードリセットメールを送信") {
+    Task {
+        do {
+            try await FirebaseAuthService.shared.sendPasswordReset(email: "user@example.com")
+            print("リセットメールを送信しました")
+        } catch {
+            print("エラー: \(error.localizedDescription)")
+        }
+    }
+}
+```
+
+#### 現在のユーザー情報を取得
+
+```swift
+import KaitoKit
+
+let authService = FirebaseAuthService.shared
+
+// ログイン状態
+if authService.isAuthenticated {
+    print("ログイン中")
+}
+
+// ユーザー情報
+if let userId = authService.userId {
+    print("ユーザーID: \(userId)")
+}
+
+if let email = authService.userEmail {
+    print("メール: \(email)")
+}
+
+if let name = authService.displayName {
+    print("表示名: \(name)")
+}
+
+if let photoURL = authService.photoURL {
+    print("プロフィール画像: \(photoURL)")
+}
+```
+
 ### 認証ヘルパー
 
 ```swift
@@ -366,7 +615,11 @@ struct StyledView: View {
 
 ### Firebase依存
 
-FirestoreServiceを使用する場合は、プロジェクトでFirebase SDKを追加する必要があります。KaitoKit自体はFirebaseに依存していません。
+FirestoreServiceやFirebaseAuthServiceを使用する場合は、プロジェクトでFirebase SDKを追加する必要があります。KaitoKit自体はFirebaseに依存していません（条件付きコンパイル使用）。
+
+### Google Sign In依存
+
+Googleログインを使用する場合は、GoogleSignIn-iOS SDKを追加する必要があります。KaitoKit自体はGoogleSignInに依存していません（条件付きコンパイル使用）。
 
 ## ライセンス
 
