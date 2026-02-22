@@ -334,22 +334,27 @@ struct LoginView: View {
             SecureField("パスワード", text: $password)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
 
-            // サインアップ
+            // サインアップ（返り値でユーザー情報を取得）
             Button("アカウント作成") {
                 Task {
                     do {
-                        try await authService.signUpWithEmail(email: email, password: password)
+                        let userInfo = try await authService.signUpWithEmail(email: email, password: password)
+                        print("作成成功: UID=\(userInfo.uid), Email=\(userInfo.email ?? "なし")")
                     } catch {
                         print("エラー: \(error.localizedDescription)")
                     }
                 }
             }
 
-            // サインイン
+            // サインイン（返り値でユーザー情報を取得）
             Button("ログイン") {
                 Task {
                     do {
-                        try await authService.signInWithEmail(email: email, password: password)
+                        let userInfo = try await authService.signInWithEmail(email: email, password: password)
+                        print("ログイン成功: UID=\(userInfo.uid)")
+                        print("メール: \(userInfo.email ?? "なし")")
+                        print("表示名: \(userInfo.displayName ?? "なし")")
+                        print("プロバイダー: \(userInfo.providerID ?? "なし")")
                     } catch {
                         print("エラー: \(error.localizedDescription)")
                     }
@@ -499,6 +504,46 @@ if let name = authService.displayName {
 if let photoURL = authService.photoURL {
     print("プロフィール画像: \(photoURL)")
 }
+```
+
+#### AuthUserInfo構造体
+
+サインイン時に返される`AuthUserInfo`には以下の情報が含まれます：
+
+```swift
+public struct AuthUserInfo {
+    public let uid: String                  // ユーザーID
+    public let email: String?               // メールアドレス
+    public let displayName: String?         // 表示名
+    public let photoURL: URL?               // プロフィール画像URL
+    public let isEmailVerified: Bool        // メール確認済みか
+    public let creationDate: Date?          // アカウント作成日
+    public let lastSignInDate: Date?        // 最終サインイン日
+    public let providerID: String?          // プロバイダーID（"password", "google.com", "apple.com"等）
+}
+```
+
+使用例：
+
+```swift
+// サインイン時に返り値としてユーザー情報を取得
+let userInfo = try await authService.signInWithEmail(email: "user@example.com", password: "password")
+
+// ユーザー情報を使用
+print("UID: \(userInfo.uid)")
+print("Email: \(userInfo.email ?? "未設定")")
+print("表示名: \(userInfo.displayName ?? "未設定")")
+print("メール確認済み: \(userInfo.isEmailVerified)")
+print("アカウント作成日: \(userInfo.creationDate?.description ?? "不明")")
+print("プロバイダー: \(userInfo.providerID ?? "不明")")
+
+// Googleログインの場合も同様
+let googleUserInfo = try await authService.signInWithGoogle()
+print("Googleアカウント: \(googleUserInfo.email ?? "不明")")
+
+// Appleログインの場合も同様
+let appleUserInfo = try await authService.signInWithApple(idToken: token, rawNonce: nonce)
+print("Apple ID: \(appleUserInfo.uid)")
 ```
 
 ### 認証ヘルパー

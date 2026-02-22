@@ -42,6 +42,58 @@ import CryptoKit
 import GoogleSignIn
 #endif
 
+// MARK: - Auth User Info
+
+/// 認証ユーザー情報
+public struct AuthUserInfo {
+    /// ユーザーID
+    public let uid: String
+
+    /// メールアドレス
+    public let email: String?
+
+    /// 表示名
+    public let displayName: String?
+
+    /// プロフィール画像URL
+    public let photoURL: URL?
+
+    /// メール確認済みか
+    public let isEmailVerified: Bool
+
+    /// アカウント作成日
+    public let creationDate: Date?
+
+    /// 最終サインイン日
+    public let lastSignInDate: Date?
+
+    /// プロバイダーID（例: "password", "google.com", "apple.com"）
+    public let providerID: String?
+
+    public init(uid: String, email: String?, displayName: String?, photoURL: URL?, isEmailVerified: Bool, creationDate: Date?, lastSignInDate: Date?, providerID: String?) {
+        self.uid = uid
+        self.email = email
+        self.displayName = displayName
+        self.photoURL = photoURL
+        self.isEmailVerified = isEmailVerified
+        self.creationDate = creationDate
+        self.lastSignInDate = lastSignInDate
+        self.providerID = providerID
+    }
+
+    /// Firebase UserからAuthUserInfoを生成
+    public init(from user: User) {
+        self.uid = user.uid
+        self.email = user.email
+        self.displayName = user.displayName
+        self.photoURL = user.photoURL
+        self.isEmailVerified = user.isEmailVerified
+        self.creationDate = user.metadata.creationDate
+        self.lastSignInDate = user.metadata.lastSignInDate
+        self.providerID = user.providerData.first?.providerID
+    }
+}
+
 // MARK: - Firebase Auth Errors
 
 public enum FirebaseAuthError: Error, LocalizedError {
@@ -159,26 +211,32 @@ public class FirebaseAuthService: ObservableObject {
     // MARK: - Email/Password Authentication
 
     /// メールアドレスとパスワードでサインアップ
-    public func signUpWithEmail(email: String, password: String) async throws {
+    @discardableResult
+    public func signUpWithEmail(email: String, password: String) async throws -> AuthUserInfo {
         do {
             let result = try await Auth.auth().createUser(withEmail: email, password: password)
+            let userInfo = AuthUserInfo(from: result.user)
             await MainActor.run {
                 self.currentUser = result.user
                 self.isAuthenticated = true
             }
+            return userInfo
         } catch let error as NSError {
             throw mapAuthError(error)
         }
     }
 
     /// メールアドレスとパスワードでサインイン
-    public func signInWithEmail(email: String, password: String) async throws {
+    @discardableResult
+    public func signInWithEmail(email: String, password: String) async throws -> AuthUserInfo {
         do {
             let result = try await Auth.auth().signIn(withEmail: email, password: password)
+            let userInfo = AuthUserInfo(from: result.user)
             await MainActor.run {
                 self.currentUser = result.user
                 self.isAuthenticated = true
             }
+            return userInfo
         } catch let error as NSError {
             throw mapAuthError(error)
         }
@@ -205,7 +263,8 @@ public class FirebaseAuthService: ObservableObject {
     }
 
     /// Apple Sign Inで認証
-    public func signInWithApple(idToken: String, rawNonce: String) async throws {
+    @discardableResult
+    public func signInWithApple(idToken: String, rawNonce: String) async throws -> AuthUserInfo {
         let credential = OAuthProvider.credential(
             withProviderID: "apple.com",
             idToken: idToken,
@@ -214,10 +273,12 @@ public class FirebaseAuthService: ObservableObject {
 
         do {
             let result = try await Auth.auth().signIn(with: credential)
+            let userInfo = AuthUserInfo(from: result.user)
             await MainActor.run {
                 self.currentUser = result.user
                 self.isAuthenticated = true
             }
+            return userInfo
         } catch {
             throw FirebaseAuthError.appleSignInFailed
         }
@@ -257,7 +318,8 @@ public class FirebaseAuthService: ObservableObject {
 
     /// Googleログイン
     /// - Parameter presentingViewController: プレゼンテーション用のViewController（iOSの場合）
-    public func signInWithGoogle(presentingViewController: UIViewController? = nil) async throws {
+    @discardableResult
+    public func signInWithGoogle(presentingViewController: UIViewController? = nil) async throws -> AuthUserInfo {
         guard let clientID = Auth.auth().app?.options.clientID else {
             throw FirebaseAuthError.googleSignInFailed
         }
@@ -300,10 +362,12 @@ public class FirebaseAuthService: ObservableObject {
             )
 
             let authResult = try await Auth.auth().signIn(with: credential)
+            let userInfo = AuthUserInfo(from: authResult.user)
             await MainActor.run {
                 self.currentUser = authResult.user
                 self.isAuthenticated = true
             }
+            return userInfo
         } catch {
             throw FirebaseAuthError.googleSignInFailed
         }
