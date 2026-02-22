@@ -18,7 +18,6 @@ import Foundation
 /// import FirebaseFirestore
 /// ```
 
-#if canImport(FirebaseFirestore)
 import FirebaseFirestore
 
 // MARK: - Firestore Errors
@@ -293,5 +292,3 @@ public class FirestoreService {
         }
     }
 }
-
-#endif

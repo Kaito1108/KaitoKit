@@ -27,7 +27,6 @@ import SwiftUI
 /// import GoogleSignIn
 /// ```
 
-#if canImport(FirebaseAuth)
 import FirebaseAuth
 
 #if canImport(AuthenticationServices)
@@ -438,5 +437,3 @@ public class FirebaseAuthService: ObservableObject {
         }
     }
 }
-
-#endif
